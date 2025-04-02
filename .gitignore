@@ -1,0 +1,4 @@
+/node_modules
+.env
+/public/main-bundled.js
+/public/main-bundled.js.LICENSE.txt
