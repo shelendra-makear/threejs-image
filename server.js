@@ -1,31 +1,8 @@
-const session = require('express-session')
-const flash = require('connect-flash')
 const express = require('express')
 const router = require('./router')
 
 const app = express()
 
-let sessionOptions = session({
-    name: "T3_session",
-    secret: "seven sisters big",
-    resave: false,
-    saveUninitialized: false,
-    rolling: true,
-    cookie: {
-        secure: process.env.NODE_ENV === "PRODUCTION" ? true : false,
-        sameSite: process.env.NODE_ENV === "PRODUCTION" ? "strict" : "lax",
-        httpOnly: true,
-        maxAge: 3600000
-    }
-
-})
-
-app.use(sessionOptions)
-app.use(flash())
-
-if (process.env.NODE_ENV === "PRODUCTION") {
-    app.set('trust proxy', 1);
-}
 
 app.use(express.static('public'))
 

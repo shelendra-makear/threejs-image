@@ -1,0 +1,225 @@
+import * as THREE from "three";
+export default function script() {
+
+  let scene, camera, renderer, mesh, clock;
+  let current = 0, next = 1, isAnimating = false;
+  let textures = [];
+  let material;
+  let currentEffect = 0;
+  let isImagePhase = false; // slideshow active flag
+  let video, videoTexture;
+
+  // --- Assets ---
+  const imagePaths = [
+    "/assets/images/image1.png",
+    "/assets/images/image2.png",
+    "/assets/images/image3.png",
+    "/assets/images/image4.png",
+    "/assets/images/image5.png",
+    "/assets/images/image6.png"
+  ];
+
+  const videoPaths = [
+    "/assets/videos/intro.mp4",   // first
+    "/assets/videos/extra1.mp4",  // after slideshow
+    "/assets/videos/extra2.mp4",
+    "/assets/videos/extra3.mp4"
+  ];
+
+  // --- Shaders (same as before, shortened for brevity) ---
+  const shaders = [
+    {
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D uTex1;
+        uniform sampler2D uTex2;
+        uniform float uProgress;
+        uniform float uTime;
+        void main() {
+          vec2 uv = vUv;
+          uv.y += sin(uv.x * 20.0 + uTime * 2.0) * 0.05 * (1.0 - uProgress);
+          vec4 c1 = texture2D(uTex1, uv);
+          vec4 c2 = texture2D(uTex2, uv);
+          gl_FragColor = mix(c1, c2, uProgress);
+        }
+      `
+    },
+    // ... keep your other shader effects ...
+  ];
+
+  const vertexShader = `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `;
+
+  // --- Init ---
+  init();
+
+  function init() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10);
+    camera.position.z = 1.5;
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    clock = new THREE.Clock();
+    window.addEventListener("resize", onResize);
+
+    // UI button
+    const btn = document.createElement("button");
+    btn.innerText = "Start Experience";
+    btn.style.position = "absolute";
+    btn.style.top = "50%";
+    btn.style.left = "50%";
+    btn.style.transform = "translate(-50%, -50%)";
+    btn.style.padding = "20px 40px";
+    btn.style.fontSize = "18px";
+    btn.style.cursor = "pointer";
+    btn.style.zIndex = "9999";
+    document.body.appendChild(btn);
+
+    btn.addEventListener("click", async () => {
+      btn.remove();
+      await loadAllTextures(imagePaths);
+      startVideo(videoPaths[0], startSlideshow);
+
+      // allow sound after first click
+      document.body.addEventListener("click", () => {
+        if (video) {
+          video.muted = false;
+          video.play();
+        }
+      }, { once: true });
+    });
+  }
+
+  // --- Play Video ---
+  function startVideo(path, onEnd) {
+    video = document.createElement("video");
+    video.src = path;
+    video.crossOrigin = "anonymous";
+    video.loop = false;
+    video.autoplay = true;
+    video.muted = true;        // ✅ autoplay allowed
+    video.playsInline = true;  // ✅ iOS Safari
+
+    video.addEventListener("canplay", () => {
+      video.play().catch(err => console.warn("Autoplay blocked:", err));
+    });
+
+    videoTexture = new THREE.VideoTexture(video);
+    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.magFilter = THREE.LinearFilter;
+    videoTexture.format = THREE.RGBAFormat;
+
+    const geo = new THREE.PlaneGeometry(2, 2);
+    material = new THREE.MeshBasicMaterial({ map: videoTexture });
+    mesh = new THREE.Mesh(geo, material);
+    scene.add(mesh);
+
+    animate();
+
+    video.onended = () => {
+      scene.remove(mesh);
+      video.pause();
+      onEnd && onEnd();
+    };
+  }
+
+  // --- Slideshow ---
+  function startSlideshow() {
+    isImagePhase = true;
+    const geo = new THREE.PlaneGeometry(2, 2);
+    material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader: shaders[currentEffect].fragmentShader,
+      uniforms: {
+        uTex1: { value: textures[current] },
+        uTex2: { value: textures[next] },
+        uProgress: { value: 0 },
+        uTime: { value: 0 }
+      },
+      side: THREE.DoubleSide
+    });
+
+    mesh = new THREE.Mesh(geo, material);
+    scene.add(mesh);
+
+    setInterval(nextSlide, 4000);
+
+    // after slideshow → play next videos
+    setTimeout(() => {
+      isImagePhase = false;
+      scene.remove(mesh);
+      playExtraVideos();
+    }, imagePaths.length * 4000 + 2000);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    if (isImagePhase && material.uniforms) {
+      material.uniforms.uTime.value = clock.getElapsedTime();
+    }
+    renderer.render(scene, camera);
+  }
+
+  function nextSlide() {
+    if (!isImagePhase || isAnimating) return;
+    isAnimating = true;
+
+    const total = textures.length;
+    current = (current + 1) % total;
+    next = (current + 1) % total;
+    currentEffect = (currentEffect + 1) % shaders.length;
+
+    material.fragmentShader = shaders[currentEffect].fragmentShader;
+    material.needsUpdate = true;
+    material.uniforms.uTex1.value = textures[(current - 1 + total) % total];
+    material.uniforms.uTex2.value = textures[current];
+
+    tween(0, 1, 1500, (p) => {
+      material.uniforms.uProgress.value = p;
+    }, () => { isAnimating = false; });
+  }
+
+  async function playExtraVideos() {
+    for (let i = 1; i < videoPaths.length; i++) {
+      await new Promise(resolve => startVideo(videoPaths[i], resolve));
+    }
+  }
+
+  // --- Helpers ---
+  function tween(from, to, duration, onUpdate, onComplete) {
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const e = 0.5 - 0.5 * Math.cos(Math.PI * t);
+      onUpdate(from + (to - from) * e);
+      if (t < 1) requestAnimationFrame(step);
+      else onComplete && onComplete();
+    }
+    requestAnimationFrame(step);
+  }
+
+  function loadAllTextures(paths) {
+    const loader = new THREE.TextureLoader();
+    return Promise.all(paths.map(p => new Promise((res, rej) => {
+      loader.load(p, tex => {
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        res(tex);
+      }, undefined, rej);
+    }))).then(list => textures = list);
+  }
+
+  function onResize() {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+}
