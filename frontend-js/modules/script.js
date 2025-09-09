@@ -20,10 +20,8 @@ export default function script() {
   ];
 
   const videoPaths = [
-    "/assets/videos/intro.mp4",   // first
-    "/assets/videos/extra1.mp4",  // after slideshow
-    "/assets/videos/extra2.mp4",
-    "/assets/videos/extra3.mp4"
+    "/assets/videos/intro1.mp4",   // first
+    "/assets/videos/intro2.mp4"
   ];
 
   // --- Shaders (same as before, shortened for brevity) ---
