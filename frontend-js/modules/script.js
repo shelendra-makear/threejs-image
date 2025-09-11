@@ -24,15 +24,19 @@ export default function script() {
   // --- Shaders (same as before, shortened for brevity) ---
   const shaders = [
     {
-      fragmentShader: `
+        fragmentShader: `
         varying vec2 vUv;
         uniform sampler2D uTex1;
         uniform sampler2D uTex2;
         uniform float uProgress;
         uniform float uTime;
+
         void main() {
-          vec2 uv = vUv;
-          uv.y += sin(uv.x * 20.0 + uTime * 2.0) * 0.05 * (1.0 - uProgress);
+          vec2 uv = vUv - 0.5;
+          float dist = length(uv);
+          float ripple = sin(dist * 40.0 - uTime * 4.0) * 0.02;
+          uv += normalize(uv) * ripple * (1.0 - uProgress);
+          uv += 0.5;
           vec4 c1 = texture2D(uTex1, uv);
           vec4 c2 = texture2D(uTex2, uv);
           gl_FragColor = mix(c1, c2, uProgress);
