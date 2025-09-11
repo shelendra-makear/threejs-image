@@ -13,15 +13,12 @@ export default function script() {
   const imagePaths = [
     "/assets/images/image1.png",
     "/assets/images/image2.png",
-    "/assets/images/image3.png",
-    "/assets/images/image4.png",
-    "/assets/images/image5.png",
-    "/assets/images/image6.png"
+    "/assets/images/image3.png"
   ];
 
   const videoPaths = [
     "/assets/videos/intro1.mp4",   // first
-    "/assets/videos/intro2.mp4"
+    "/assets/videos/extra1.mp4"
   ];
 
   // --- Shaders (same as before, shortened for brevity) ---
@@ -103,7 +100,7 @@ export default function script() {
     video.crossOrigin = "anonymous";
     video.loop = false;
     video.autoplay = true;
-    video.muted = true;        // ✅ autoplay allowed
+    video.muted = false;        // ✅ autoplay allowed
     video.playsInline = true;  // ✅ iOS Safari
 
     video.addEventListener("canplay", () => {
