@@ -83,38 +83,44 @@ export function script2() {
       document.getElementById("stopBtn").disabled = true;
     }
 
-    async function shareVideo() {
+async function shareVideo() {
     if (!recordedBlob) return alert("Please record video first!");
 
     const file = new File([recordedBlob], "recording.mp4", { type: mimeType });
 
     try {
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            // Device can share the video file
             await navigator.share({
                 files: [file],
                 title: "My Video",
                 text: "Check out this video I recorded!",
             });
             console.log("Video shared successfully!");
+        } else if (navigator.share) {
+            // Device cannot share files but can share text/URLs
+            await navigator.share({
+                title: "My Video",
+                text: "Check out this video I recorded!",
+            });
+            alert("This device cannot share video files, only text.");
         } else {
-            // Fallback: automatic download
-            const url = URL.createObjectURL(file);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "recording.mp4";
-            a.click();
-            alert("Sharing not supported; video downloaded instead.");
+            // Device does not support Web Share API at all
+            alert(
+                "Sharing is not supported on this device/browser. You cannot share the video here."
+            );
         }
     } catch (err) {
+        // User canceled or blocked sharing
         console.error("Error sharing:", err);
-        // Also fallback to download if user cancels or denied
-        const url = URL.createObjectURL(file);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "recording.mp4";
-        a.click();
+        if (err.name === "NotAllowedError") {
+            alert(
+                "Sharing was blocked or canceled. You cannot share the video on this device."
+            );
+        }
     }
 }
+
 
 
     document.getElementById("startBtn").addEventListener("click", startRecording);
