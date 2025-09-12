@@ -5,41 +5,49 @@
   <title>Three.js Video Texture + Recorder</title>
   <style>
     body { margin: 0; overflow: hidden; background: #000; }
+    
+    /* Controls container at the bottom */
     #controls {
       position: fixed;
-      top: 10px;
+      bottom: 20px; /* place near bottom */
       left: 50%;
       transform: translateX(-50%);
       z-index: 10;
     }
-   button {
-    padding: 10px 20px;
-    font-size: 16px;
-    font-weight: 500;
-    border: none;
-    border-radius: 12px; /* iOS style rounded corners */
-    background: linear-gradient(145deg, #f0f0f0, #d9d9d9);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    color: #000;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-    #startBtn, #stopBtn { margin: 0 6px; padding: 18px 20px; font-size: 18px; }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: 500;
+      border: none;
+      border-radius: 12px; /* iOS style rounded corners */
+      background: linear-gradient(145deg, #f0f0f0, #d9d9d9);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      color: #000;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin: 0 6px;
+    }
+
+    #startBtn, #stopBtn {
+      padding: 18px 24px;
+      font-size: 18px;
+    }
+
     video#preview {
       display: block;
-      margin: 60px auto 0;
+      margin: 0 auto 60px; /* space from bottom buttons */
       width: 400px;
     }
   </style>
 </head>
 <body>
   <div id="controls">
-    <button id="startBtn">Start Recording</button>
-    <button id="stopBtn" disabled>Stop Recording</button>
+    <button id="startBtn">play Video</button>
+    <button id="stopBtn" disabled>stop</button>
   </div>
-  <video id="preview" controls></video>
 
-
+  <video id="preview" controls style="display: none;"></video>
 
   <script src="/main-bundled.js"></script>
 </body>

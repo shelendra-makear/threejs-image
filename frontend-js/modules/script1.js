@@ -12,11 +12,10 @@ export function script2 () {
 
     // Video element as texture source
     const video = document.createElement("video");
-    video.src = "/assets/videos/extra1665656.mp4"; // replace with your video
+    video.src = "/assets/videos/extra1.mp4"; // replace with your video
     video.crossOrigin = "anonymous";
     video.loop = false;
-    video.muted = true; // iOS Safari requires muted autoplay
-    video.play();
+    video.muted = false; // iOS Safari requires muted autoplay
 
     const videoTexture = new THREE.VideoTexture(video);
     const geometry = new THREE.PlaneGeometry(2, 1.2);
@@ -46,6 +45,10 @@ export function script2 () {
     }
 
     function startRecording() {
+      // Start video when recording starts
+      video.currentTime = 0;
+      video.play();
+
       const stream = renderer.domElement.captureStream(30); // capture canvas at 30 FPS
       recorder = new MediaRecorder(stream, { mimeType });
       recordedChunks = [];
@@ -53,6 +56,9 @@ export function script2 () {
       recorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
 
       recorder.onstop = () => {
+        // Pause video when recording stops
+        video.pause();
+
         const blob = new Blob(recordedChunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
 
