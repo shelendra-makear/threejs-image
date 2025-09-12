@@ -1,3 +1,3 @@
-import script from "./modules/script";
+import { script2 } from "./modules/script1";
 
-new script()
+new script2()
