@@ -1,21 +1,25 @@
 import * as THREE from "three";
 
-export function script2 () {
+export function script2() {
     // ---------------- THREE.JS SCENE ----------------
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+   const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
     camera.position.z = 3;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Video element as texture source
     const video = document.createElement("video");
     video.src = "/assets/videos/extra1.mp4"; // replace with your video
     video.crossOrigin = "anonymous";
     video.loop = false;
-    video.muted = false; // iOS Safari requires muted autoplay
+    video.muted = false;
 
     const videoTexture = new THREE.VideoTexture(video);
     const geometry = new THREE.PlaneGeometry(2, 1.2);
@@ -32,43 +36,40 @@ export function script2 () {
     // ---------------- RECORDING ----------------
     let recorder, recordedChunks = [];
     let mimeType;
+    let recordedBlob;
 
-    // Detect iOS
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
     if (isIOS && MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
       mimeType = "video/mp4;codecs=avc1";
     } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
       mimeType = "video/webm;codecs=vp8";
     } else {
-      mimeType = "video/mp4"; // fallback
+      mimeType = "video/mp4";
     }
 
     function startRecording() {
-      // Start video when recording starts
       video.currentTime = 0;
       video.play();
 
-      const stream = renderer.domElement.captureStream(30); // capture canvas at 30 FPS
+      const stream = renderer.domElement.captureStream(30);
       recorder = new MediaRecorder(stream, { mimeType });
       recordedChunks = [];
 
-      recorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
 
       recorder.onstop = () => {
-        // Pause video when recording stops
         video.pause();
-
-        const blob = new Blob(recordedChunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
+        recordedBlob = new Blob(recordedChunks, { type: mimeType });
+        const url = URL.createObjectURL(recordedBlob);
 
         const videoPreview = document.getElementById("preview");
         videoPreview.src = url;
 
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = mimeType.includes("mp4") ? "recording.mp4" : "recording.webm";
-        a.click();
+        document.getElementById("shareBtn").disabled = false;
       };
 
       recorder.start();
@@ -77,11 +78,46 @@ export function script2 () {
     }
 
     function stopRecording() {
-      recorder.stop();
+      if (recorder && recorder.state !== "inactive") recorder.stop();
       document.getElementById("startBtn").disabled = false;
       document.getElementById("stopBtn").disabled = true;
     }
 
+    async function shareVideo() {
+    if (!recordedBlob) return alert("Please record video first!");
+
+    const file = new File([recordedBlob], "recording.mp4", { type: mimeType });
+
+    try {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                title: "My Video",
+                text: "Check out this video I recorded!",
+            });
+            console.log("Video shared successfully!");
+        } else {
+            // Fallback: automatic download
+            const url = URL.createObjectURL(file);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "recording.mp4";
+            a.click();
+            alert("Sharing not supported; video downloaded instead.");
+        }
+    } catch (err) {
+        console.error("Error sharing:", err);
+        // Also fallback to download if user cancels or denied
+        const url = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "recording.mp4";
+        a.click();
+    }
+}
+
+
     document.getElementById("startBtn").addEventListener("click", startRecording);
     document.getElementById("stopBtn").addEventListener("click", stopRecording);
+    document.getElementById("shareBtn").addEventListener("click", shareVideo);
 }
