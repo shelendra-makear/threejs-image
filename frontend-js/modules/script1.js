@@ -2,12 +2,12 @@ import * as THREE from "three";
 
 export function script2() {
     // ---------------- THREE.JS SCENE ----------------
-   const scene = new THREE.Scene();
+    const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
-      45,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
+        45,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
     );
     camera.position.z = 3;
 
@@ -15,6 +15,7 @@ export function script2() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
+    // Video element as texture source
     const video = document.createElement("video");
     video.src = "/assets/videos/extra1.mp4"; // replace with your video
     video.crossOrigin = "anonymous";
@@ -28,8 +29,8 @@ export function script2() {
     scene.add(plane);
 
     function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
     }
     animate();
 
@@ -38,52 +39,59 @@ export function script2() {
     let mimeType;
     let recordedBlob;
 
+    // Detect iOS
     const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
     if (isIOS && MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
-      mimeType = "video/mp4;codecs=avc1";
+        mimeType = "video/mp4;codecs=avc1";
     } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-      mimeType = "video/webm;codecs=vp8";
+        mimeType = "video/webm;codecs=vp8";
     } else {
-      mimeType = "video/mp4";
+        mimeType = "video/mp4"; // fallback
     }
 
     function startRecording() {
-      video.currentTime = 0;
-      video.play();
+        video.currentTime = 0;
+        video.play();
 
-      const stream = renderer.domElement.captureStream(30);
-      recorder = new MediaRecorder(stream, { mimeType });
-      recordedChunks = [];
+        const stream = renderer.domElement.captureStream(30); // 30 FPS
+        recorder = new MediaRecorder(stream, { mimeType });
+        recordedChunks = [];
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
+        recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+        };
 
-      recorder.onstop = () => {
-        video.pause();
-        recordedBlob = new Blob(recordedChunks, { type: mimeType });
-        const url = URL.createObjectURL(recordedBlob);
+        recorder.onstop = () => {
+            video.pause();
+            recordedBlob = new Blob(recordedChunks, { type: mimeType });
+            const url = URL.createObjectURL(recordedBlob);
 
-        const videoPreview = document.getElementById("preview");
-        videoPreview.src = url;
+            const videoPreview = document.getElementById("preview");
+            if (videoPreview) videoPreview.src = url;
 
-        document.getElementById("shareBtn").disabled = false;
-      };
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = mimeType.includes("mp4")
+                ? "recording.mp4"
+                : "recording.webm";
+            a.click();
+        };
 
-      recorder.start();
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = false;
+        recorder.start();
+        document.getElementById("startBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
     }
 
     function stopRecording() {
-      if (recorder && recorder.state !== "inactive") recorder.stop();
-      document.getElementById("startBtn").disabled = false;
-      document.getElementById("stopBtn").disabled = true;
+        if (recorder && recorder.state !== "inactive") {
+            recorder.stop();
+        }
+        document.getElementById("startBtn").disabled = false;
+        document.getElementById("stopBtn").disabled = true;
     }
-
-async function shareVideo() {
+    async function shareVideo() {
     if (!recordedBlob) return alert("Please record video first!");
 
     const file = new File([recordedBlob], "recording.mp4", { type: mimeType });
@@ -122,8 +130,8 @@ async function shareVideo() {
 }
 
 
-
+    // ---------------- BUTTON EVENT LISTENERS ----------------
     document.getElementById("startBtn").addEventListener("click", startRecording);
     document.getElementById("stopBtn").addEventListener("click", stopRecording);
-    document.getElementById("shareBtn").addEventListener("click", shareVideo);
+      document.getElementById("shareBtn").addEventListener("click", shareVideo);
 }
