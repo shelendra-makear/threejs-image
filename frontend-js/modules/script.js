@@ -1,4 +1,5 @@
 import * as THREE from "three";
+
 export default function script() {
 
   let scene, camera, renderer, mesh, clock;
@@ -21,10 +22,10 @@ export default function script() {
     "/assets/videos/extra1.mp4"
   ];
 
-  // --- Shaders (same as before, shortened for brevity) ---
+  // --- Shaders ---
   const shaders = [
     {
-        fragmentShader: `
+      fragmentShader: `
         varying vec2 vUv;
         uniform sampler2D uTex1;
         uniform sampler2D uTex2;
@@ -42,8 +43,7 @@ export default function script() {
           gl_FragColor = mix(c1, c2, uProgress);
         }
       `
-    },
-    // ... keep your other shader effects ...
+    }
   ];
 
   const vertexShader = `
@@ -59,17 +59,32 @@ export default function script() {
 
   function init() {
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10);
+    camera = new THREE.PerspectiveCamera(60, 1, 0.1, 10);
     camera.position.z = 1.5;
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+
+    // --- Card container ---
+    const card = document.createElement("div");
+    card.style.position = "relative";
+    card.style.margin = "50px auto";
+    card.style.width = "80%";
+    card.style.height = "500px";
+    card.style.border = "2px solid #ccc";
+    card.style.borderRadius = "16px";
+    card.style.overflow = "hidden";
+    card.style.boxShadow = "0 4px 20px rgba(0,0,0,0.3)";
+    card.style.background = "#000";
+    document.body.appendChild(card);
+
+    // attach renderer to card
+    card.appendChild(renderer.domElement);
 
     clock = new THREE.Clock();
     window.addEventListener("resize", onResize);
+    onResize(); // run once to size correctly
 
-    // UI button
+    // --- UI button ---
     const btn = document.createElement("button");
     btn.innerText = "Start Experience";
     btn.style.position = "absolute";
@@ -80,7 +95,7 @@ export default function script() {
     btn.style.fontSize = "18px";
     btn.style.cursor = "pointer";
     btn.style.zIndex = "9999";
-    document.body.appendChild(btn);
+    card.appendChild(btn);
 
     btn.addEventListener("click", async () => {
       btn.remove();
@@ -88,7 +103,7 @@ export default function script() {
       startVideo(videoPaths[0], startSlideshow);
 
       // allow sound after first click
-      document.body.addEventListener("click", () => {
+      card.addEventListener("click", () => {
         if (video) {
           video.muted = false;
           video.play();
@@ -104,8 +119,8 @@ export default function script() {
     video.crossOrigin = "anonymous";
     video.loop = false;
     video.autoplay = true;
-    video.muted = false;        // ✅ autoplay allowed
-    video.playsInline = true;  // ✅ iOS Safari
+    video.muted = false;
+    video.playsInline = true;
 
     video.addEventListener("canplay", () => {
       video.play().catch(err => console.warn("Autoplay blocked:", err));
@@ -151,7 +166,6 @@ export default function script() {
 
     setInterval(nextSlide, 4000);
 
-    // after slideshow → play next videos
     setTimeout(() => {
       isImagePhase = false;
       scene.remove(mesh);
@@ -217,8 +231,90 @@ export default function script() {
   }
 
   function onResize() {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const card = renderer.domElement.parentElement;
+    const width = card.clientWidth;
+    const height = card.clientHeight;
+    renderer.setSize(width, height);
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
+  }
+
+  // --- Recording Setup (unchanged) ---
+  let recordedChunks = [];
+  let recorder, isRecording = false;
+  let mimeType;
+  let recordedVideoBlob;
+
+  if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
+    mimeType = "video/webm;codecs=vp8";
+  } else if (MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
+    mimeType = "video/mp4;codecs=avc1";
+  } else {
+    alert("No supported MIME type found for MediaRecorder.");
+  }
+
+  const recordBtn = document.createElement("button");
+  recordBtn.innerText = "Start Recording";
+  recordBtn.style.position = "absolute";
+  recordBtn.style.bottom = "20px";
+  recordBtn.style.left = "50%";
+  recordBtn.style.transform = "translateX(-50%)";
+  recordBtn.style.padding = "10px 20px";
+  recordBtn.style.zIndex = "9999";
+  document.body.appendChild(recordBtn);
+
+  recordBtn.addEventListener("click", () => {
+    if (!isRecording) {
+      startRecording();
+      recordBtn.innerText = "Stop Recording";
+    } else {
+      stopRecording();
+      recordBtn.innerText = "Start Recording";
+    }
+  });
+
+  function startRecording() {
+    recordedChunks = [];
+    const canvasStream = renderer.domElement.captureStream(60);
+
+    let combinedStream = canvasStream;
+    if (video) {
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaElementSource(video);
+      const destination = audioCtx.createMediaStreamDestination();
+      source.connect(destination);
+      source.connect(audioCtx.destination);
+      combinedStream = new MediaStream([
+        ...canvasStream.getVideoTracks(),
+        ...destination.stream.getAudioTracks()
+      ]);
+    }
+
+    recorder = new MediaRecorder(combinedStream, { mimeType });
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recordedChunks.push(event.data);
+    };
+
+    recorder.onstop = () => {
+      recordedVideoBlob = new Blob(recordedChunks, { type: mimeType });
+      const url = URL.createObjectURL(recordedVideoBlob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "recording." + (mimeType.includes("webm") ? "webm" : "mp4");
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    recorder.start();
+    isRecording = true;
+  }
+
+  function stopRecording() {
+    if (isRecording) {
+      recorder.stop();
+      isRecording = false;
+    }
   }
 }
