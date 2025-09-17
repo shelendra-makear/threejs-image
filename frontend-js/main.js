@@ -1,3 +1,3 @@
-import { script2 } from "./modules/script1";
+import  {script} from "./modules/script";
 
-new script2()
+new script(canvasContainer)

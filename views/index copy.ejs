@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Three.js Video Texture + Recorder</title>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r146/three.min.js"></script>
+
+   
+   <script src="https://cdn.jsdelivr.net/npm/gl-transitions@1.43.0/dist/gl-transitions.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    
+    /* Controls container at the bottom */
+    #controls {
+      position: fixed;
+      bottom: 20px; /* place near bottom */
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: 500;
+      border: none;
+      border-radius: 12px; /* iOS style rounded corners */
+      background: linear-gradient(145deg, #f0f0f0, #d9d9d9);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      color: #000;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin: 0 6px;
+    }
+
+    #startBtn, #stopBtn, #shareBtn {
+      padding: 18px 24px;
+      font-size: 18px;
+    }
+
+    video#preview {
+      display: block;
+      margin: 0 auto 60px; /* space from bottom buttons */
+      width: 400px;
+    }
+  </style>
+</head>
+<body>
+  <!-- <div id="controls">
+    <button id="startBtn">play Video</button>
+    <button id="stopBtn" disabled>stop</button>
+          <button id="shareBtn" disabled>Share Video</button>
+  </div>
+
+  <video id="preview" controls style="display: none;"></video>
+
+  <script src="/main-bundled.js"></script> -->
+</body>
+</html>

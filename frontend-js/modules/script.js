@@ -1,226 +1,228 @@
 import * as THREE from "three";
-export default function script() {
 
-  let scene, camera, renderer, mesh, clock;
-  let current = 0, next = 1, isAnimating = false;
-  let textures = [];
-  let material;
-  let currentEffect = 0;
-  let isImagePhase = false; // slideshow active flag
-  let video, videoTexture;
+export function script(containerId = "canvasContainer") {
 
-  // --- Assets ---
-  const imagePaths = [
-    "/assets/images/image1.png",
-    "/assets/images/image2.png",
-    "/assets/images/image3.png"
-  ];
 
-  const videoPaths = [
-    "/assets/videos/intro1.mp4",   // first
-    "/assets/videos/extra1.mp4"
-  ];
+    let scene, camera, renderer, mesh, clock;
+    let video, videoTexture, material;
+    let container;
+    let overlays = [];
+    let recorder, recordedChunks = [];
+    let mimeType;
+    let recordedBlob;
 
-  // --- Shaders (same as before, shortened for brevity) ---
-  const shaders = [
-    {
-        fragmentShader: `
-        varying vec2 vUv;
-        uniform sampler2D uTex1;
-        uniform sampler2D uTex2;
-        uniform float uProgress;
-        uniform float uTime;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-        void main() {
-          vec2 uv = vUv - 0.5;
-          float dist = length(uv);
-          float ripple = sin(dist * 40.0 - uTime * 4.0) * 0.02;
-          uv += normalize(uv) * ripple * (1.0 - uProgress);
-          uv += 0.5;
-          vec4 c1 = texture2D(uTex1, uv);
-          vec4 c2 = texture2D(uTex2, uv);
-          gl_FragColor = mix(c1, c2, uProgress);
-        }
-      `
-    },
-    // ... keep your other shader effects ...
-  ];
-
-  const vertexShader = `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    if (isIOS && MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
+      mimeType = "video/mp4;codecs=avc1";
+    } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
+      mimeType = "video/webm;codecs=vp8";
+    } else {
+      mimeType = "video/mp4";
     }
-  `;
 
-  // --- Init ---
-  init();
+    container = document.getElementById("canvasContainer");
 
-  function init() {
+    // --- Scene ---
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10);
-    camera.position.z = 1.5;
+    camera.position.z = 1;
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
 
     clock = new THREE.Clock();
     window.addEventListener("resize", onResize);
 
-    // UI button
-    const btn = document.createElement("button");
-    btn.innerText = "Start Experience";
-    btn.style.position = "absolute";
-    btn.style.top = "50%";
-    btn.style.left = "50%";
-    btn.style.transform = "translate(-50%, -50%)";
-    btn.style.padding = "20px 40px";
-    btn.style.fontSize = "18px";
-    btn.style.cursor = "pointer";
-    btn.style.zIndex = "9999";
-    document.body.appendChild(btn);
+    const vertexShader = `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+      }
+    `;
 
-    btn.addEventListener("click", async () => {
-      btn.remove();
-      await loadAllTextures(imagePaths);
-      startVideo(videoPaths[0], startSlideshow);
+    const fragmentShader = `
+      uniform sampler2D map;
+      varying vec2 vUv;
+      void main() {
+        gl_FragColor = texture2D(map, vUv);
+      }
+    `;
 
-      // allow sound after first click
-      document.body.addEventListener("click", () => {
-        if (video) {
-          video.muted = false;
-          video.play();
-        }
-      }, { once: true });
-    });
-  }
+    startVideo("/assets/videos/intro11.mp4");
 
-  // --- Play Video ---
-  function startVideo(path, onEnd) {
-    video = document.createElement("video");
-    video.src = path;
-    video.crossOrigin = "anonymous";
-    video.loop = false;
-    video.autoplay = true;
-    video.muted = false;        // ✅ autoplay allowed
-    video.playsInline = true;  // ✅ iOS Safari
+    function startVideo(path) {
+      video = document.createElement("video");
+      video.src = path;
+      video.crossOrigin = "anonymous";
+      video.loop = false;
+      video.autoplay = true;
+      video.muted = false;
+      video.playsInline = true;
 
-    video.addEventListener("canplay", () => {
-      video.play().catch(err => console.warn("Autoplay blocked:", err));
-    });
+      video.addEventListener("canplay", () => {
+        video.play().catch(err => console.warn("Autoplay blocked:", err));
+        createVideoPlane();
+        createOverlays();
+      });
+    }
 
-    videoTexture = new THREE.VideoTexture(video);
-    videoTexture.minFilter = THREE.LinearFilter;
-    videoTexture.magFilter = THREE.LinearFilter;
-    videoTexture.format = THREE.RGBAFormat;
+    function createVideoPlane() {
+      if (mesh) scene.remove(mesh);
 
-    const geo = new THREE.PlaneGeometry(2, 2);
-    material = new THREE.MeshBasicMaterial({ map: videoTexture });
-    mesh = new THREE.Mesh(geo, material);
-    scene.add(mesh);
+      videoTexture = new THREE.VideoTexture(video);
+      videoTexture.minFilter = THREE.LinearFilter;
+      videoTexture.magFilter = THREE.LinearFilter;
+      videoTexture.format = THREE.RGBAFormat;
+
+      const screenAspect = window.innerWidth / window.innerHeight;
+      const videoAspect = video.videoWidth / video.videoHeight;
+
+      let width, height;
+      if (screenAspect > videoAspect) {
+        height = 1;
+        width = height * videoAspect / screenAspect;
+      } else {
+        width = 1;
+        height = width * screenAspect / videoAspect;
+      }
+
+      const geo = new THREE.PlaneGeometry(width, height);
+      material = new THREE.ShaderMaterial({
+        uniforms: { map: { value: videoTexture } },
+        vertexShader,
+        fragmentShader,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+
+      mesh = new THREE.Mesh(geo, material);
+      scene.add(mesh);
+    }
+
+    function createOverlays() {
+      const fps = 30;
+      const overlayData = [
+        { startFrame: 30, endFrame: 150, image: "/assets/images/image1.png" },
+        { startFrame: 200, endFrame: 350, image: "/assets/images/image2.png" }
+      ];
+
+      overlayData.forEach(data => {
+        const loader = new THREE.TextureLoader();
+        const geo = new THREE.PlaneGeometry(2, 2); // full plane
+        const mat = new THREE.MeshBasicMaterial({ map: null, transparent: true, opacity: 0 });
+        const overlayMesh = new THREE.Mesh(geo, mat);
+        overlayMesh.position.set(-1.2, 0, 0.51); // start off-screen left
+        scene.add(overlayMesh);
+        overlays.push({ ...data, mesh: overlayMesh, material: mat });
+        
+        loader.load(data.image, tex => {
+          mat.map = tex;
+          mat.needsUpdate = true;
+        });
+      });
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Overlay animation
+      if (video && !video.paused && !video.ended) {
+        const fps = 30;
+        const currentFrame = Math.floor(video.currentTime * fps);
+
+        overlays.forEach(o => {
+          if (currentFrame >= o.startFrame && currentFrame <= o.endFrame) {
+            o.material.opacity = Math.min(1, o.material.opacity + 0.05);
+            const progress = (currentFrame - o.startFrame) / (o.endFrame - o.startFrame);
+            o.mesh.position.x = -1.2 + 2.4 * progress;
+          } else {
+            o.material.opacity = Math.max(0, o.material.opacity - 0.05);
+          }
+        });
+      }
+
+      renderer.render(scene, camera);
+    }
 
     animate();
 
-    video.onended = () => {
-      scene.remove(mesh);
-      video.pause();
-      onEnd && onEnd();
-    };
-  }
-
-  // --- Slideshow ---
-  function startSlideshow() {
-    isImagePhase = true;
-    const geo = new THREE.PlaneGeometry(2, 2);
-    material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: shaders[currentEffect].fragmentShader,
-      uniforms: {
-        uTex1: { value: textures[current] },
-        uTex2: { value: textures[next] },
-        uProgress: { value: 0 },
-        uTime: { value: 0 }
-      },
-      side: THREE.DoubleSide
-    });
-
-    mesh = new THREE.Mesh(geo, material);
-    scene.add(mesh);
-
-    setInterval(nextSlide, 4000);
-
-    // after slideshow → play next videos
-    setTimeout(() => {
-      isImagePhase = false;
-      scene.remove(mesh);
-      playExtraVideos();
-    }, imagePaths.length * 4000 + 2000);
-  }
-
-  function animate() {
-    requestAnimationFrame(animate);
-    if (isImagePhase && material.uniforms) {
-      material.uniforms.uTime.value = clock.getElapsedTime();
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      if (video && video.videoWidth > 0) createVideoPlane();
     }
-    renderer.render(scene, camera);
-  }
 
-  function nextSlide() {
-    if (!isImagePhase || isAnimating) return;
-    isAnimating = true;
+    // --- Recording ---
+    function startRecording() {
+      video.currentTime = 0;
+      video.play();
 
-    const total = textures.length;
-    current = (current + 1) % total;
-    next = (current + 1) % total;
-    currentEffect = (currentEffect + 1) % shaders.length;
+      const stream = renderer.domElement.captureStream(30);
+      recorder = new MediaRecorder(stream, { mimeType });
+      recordedChunks = [];
 
-    material.fragmentShader = shaders[currentEffect].fragmentShader;
-    material.needsUpdate = true;
-    material.uniforms.uTex1.value = textures[(current - 1 + total) % total];
-    material.uniforms.uTex2.value = textures[current];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
 
-    tween(0, 1, 1500, (p) => {
-      material.uniforms.uProgress.value = p;
-    }, () => { isAnimating = false; });
-  }
+      recorder.onstop = () => {
+        video.pause();
+        recordedBlob = new Blob(recordedChunks, { type: mimeType });
+        const url = URL.createObjectURL(recordedBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = mimeType.includes("mp4") ? "recording.mp4" : "recording.webm";
+        a.click();
 
-  async function playExtraVideos() {
-    for (let i = 1; i < videoPaths.length; i++) {
-      await new Promise(resolve => startVideo(videoPaths[i], resolve));
+        const videoPreview = document.getElementById("preview");
+        videoPreview.src = url;
+
+        document.getElementById("shareBtn").disabled = false;
+      };
+
+      recorder.start();
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
     }
-  }
 
-  // --- Helpers ---
-  function tween(from, to, duration, onUpdate, onComplete) {
-    const start = performance.now();
-    function step(now) {
-      const t = Math.min(1, (now - start) / duration);
-      const e = 0.5 - 0.5 * Math.cos(Math.PI * t);
-      onUpdate(from + (to - from) * e);
-      if (t < 1) requestAnimationFrame(step);
-      else onComplete && onComplete();
+    function stopRecording() {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
     }
-    requestAnimationFrame(step);
-  }
 
-  function loadAllTextures(paths) {
-    const loader = new THREE.TextureLoader();
-    return Promise.all(paths.map(p => new Promise((res, rej) => {
-      loader.load(p, tex => {
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        res(tex);
-      }, undefined, rej);
-    }))).then(list => textures = list);
-  }
+    async function shareVideo() {
+      if (!recordedBlob) return alert("Please record video first!");
+      const file = new File([recordedBlob], "recording.mp4", { type: mimeType });
 
-  function onResize() {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  }
+      try {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: "My Video",
+            text: "Check out this video I recorded!",
+          });
+        } else if (navigator.share) {
+          await navigator.share({
+            title: "My Video",
+            text: "Check out this video I recorded!",
+          });
+          alert("This device cannot share video files, only text.");
+        } else {
+          alert("Sharing is not supported on this device/browser.");
+        }
+      } catch (err) {
+        console.error("Error sharing:", err);
+      }
+    }
 
-  
+    document.getElementById("startBtn").addEventListener("click", startRecording);
+    document.getElementById("stopBtn").addEventListener("click", stopRecording);
+    document.getElementById("shareBtn").addEventListener("click", shareVideo);
 }
