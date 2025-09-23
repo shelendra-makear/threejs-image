@@ -269,7 +269,7 @@ else if(currentFrame > holdEnd && currentFrame <= end){
 
   async function shareVideo(){
     if(!recordedBlob) return alert("Please record video first!");
-    const file = new File([recordedBlob],"recording.webm",{type:mimeType});
+    const file = new File([recordedBlob],"recording.mp4",{type:mimeType});
     try{
       if(navigator.canShare && navigator.canShare({files:[file]})){
         await navigator.share({files:[file],title:"My Video",text:"Check out this video!"});
