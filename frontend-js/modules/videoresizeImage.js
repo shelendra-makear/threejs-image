@@ -66,23 +66,13 @@ export function script(containerId = "canvasContainer") {
   `;
 
   const overlayFragmentShader = `
-   uniform sampler2D map;
-uniform float opacity;
-varying vec2 vUv;
-
-void main() {
-  vec4 tex = texture2D(map, vUv);
-
-  // Gradient background (red → yellow, vertical)
-  vec3 gradient = mix(vec3(1.0, 0.0, 0.0),   // red
-                      vec3(1.0, 1.0, 0.0),   // yellow
-                      vUv.y);
-
-  // If image has alpha, show it, otherwise show gradient
-  vec3 finalColor = mix(gradient, tex.rgb, tex.a);
-
-  gl_FragColor = vec4(finalColor, opacity);
-}
+    uniform sampler2D map;
+    uniform float opacity;
+    varying vec2 vUv;
+    void main() {
+      vec4 tex = texture2D(map, vUv);
+      gl_FragColor = vec4(tex.rgb, tex.a * opacity);
+    }
   `;
 
   // --- Start video ---
@@ -154,10 +144,11 @@ function createVideoPlane() {
   // --- Overlay images ---
   
 
-function createOverlays() {
+
+  function createOverlays() {
   const overlayData = [
-    { startFrame: 0, endFrame: 100, image: "/assets/images/image1.png" },
-    { startFrame: 200, endFrame: 350, image: "/assets/images/jjhjh.png" }
+    { startFrame: 30, endFrame: 150, image: "/assets/images/image1.png" },
+    { startFrame: 200, endFrame: 350, image: "/assets/images/image2.png" }
   ];
 
   overlayData.forEach(data => {
@@ -178,118 +169,66 @@ function createOverlays() {
     loader.load(data.image, tex => {
       mat.uniforms.map.value = tex;
 
-      // --- Set fixed size: width = 480, height = 848 ---
-      const planeWidth = 340 / 1000;   // scale down to fit Three.js world units
-      const planeHeight = 700 / 1000;  // scale down (adjust as needed)
+      // --- Adjust plane size to fit screen like videoPlane ---
+      const imgAspect = tex.image.width / tex.image.height;
+
+      const fov = THREE.MathUtils.degToRad(camera.fov);
+      const camHeight = 2 * Math.tan(fov / 2) * camera.position.z;
+      const camWidth = camHeight * camera.aspect;
+
+      let planeWidth, planeHeight;
+      if (camWidth / camHeight > imgAspect) {
+        // screen wider than image
+        planeHeight = camHeight * 0.5; // scale factor (0.5 = half screen height)
+        planeWidth = planeHeight * imgAspect;
+      } else {
+        planeWidth = camWidth * 0.5; // scale factor (0.5 = half screen width)
+        planeHeight = planeWidth / imgAspect;
+      }
 
       overlayMesh.geometry.dispose();
       overlayMesh.geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
 
-      // Position overlay at center of video plane
-      overlayMesh.position.copy(mesh.position);
-      overlayMesh.position.z += 0.01; // slightly in front
+      // initial position (can animate later)
+      overlayMesh.position.set(-camWidth / 2 - planeWidth / 2, 0, 0.5);
     });
   });
 }
 
-//   function createOverlays() {
-//   const overlayData = [
-//     { startFrame: 0, endFrame: 100, image: "/assets/images/image1.png" },
-//     { startFrame: 200, endFrame: 350, image: "/assets/images/jjhjh.png" }
-//   ];
-
-//   overlayData.forEach(data => {
-//     const loader = new THREE.TextureLoader();
-//     const mat = new THREE.ShaderMaterial({
-//       uniforms: { map: { value: null }, opacity: { value: 0 } },
-//       vertexShader,
-//       fragmentShader: overlayFragmentShader,
-//       transparent: true,
-//       depthWrite: false,
-//       side: THREE.DoubleSide
-//     });
-
-//     const overlayMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-//     scene.add(overlayMesh);
-//     overlays.push({ ...data, mesh: overlayMesh, material: mat });
-
-//     loader.load(data.image, tex => {
-//       mat.uniforms.map.value = tex;
-
-//       // --- Adjust plane size to fit screen like videoPlane ---
-//       const imgAspect = tex.image.width / tex.image.height;
-
-//       const fov = THREE.MathUtils.degToRad(camera.fov);
-//       const camHeight = 2 * Math.tan(fov / 2) * camera.position.z;
-//       const camWidth = camHeight * camera.aspect;
-
-//       let planeWidth, planeHeight;
-//       if (camWidth / camHeight > imgAspect) {
-//         // screen wider than image
-//         planeHeight = camHeight * 0.5; // scale factor (0.5 = half screen height)
-//         planeWidth = planeHeight * imgAspect;
-//       } else {
-//         planeWidth = camWidth * 0.5; // scale factor (0.5 = half screen width)
-//         planeHeight = planeWidth / imgAspect;
-//       }
-
-//       overlayMesh.geometry.dispose();
-//       overlayMesh.geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
-
-//       // initial position (can animate later)
-//       overlayMesh.position.set(-camWidth / 2 - planeWidth / 2, 0, 0.5);
-//     });
-//   });
-// }
-
 
   // --- Animation loop ---
- function animate() {
-  requestAnimationFrame(animate);
+  function animate() {
+    requestAnimationFrame(animate);
 
-  if (video && !video.paused && !video.ended) {
-    const fps = 30;
-    const currentFrame = Math.floor(video.currentTime * fps);
+    if (video && !video.paused && !video.ended) {
+      const fps = 30;
+      const currentFrame = Math.floor(video.currentTime * fps);
 
-    overlays.forEach(o => {
-      const start = o.startFrame;
-      const holdStart = start + 20;       // 20 frames for scale in
-      const holdEnd = o.endFrame - 20;    // hold until 20 frames before end
-      const end = o.endFrame;
+      overlays.forEach(o => {
+        const start = o.startFrame;
+        const holdStart = start + 20;
+        const holdEnd = o.endFrame - 20;
+        const end = o.endFrame;
 
-      if (currentFrame < start || currentFrame > end) {
-        // before or after → invisible
-        o.material.uniforms.opacity.value = 0;
-        o.mesh.scale.set(0, 0, 1);
-      } 
-      else if (currentFrame >= start && currentFrame < holdStart) {
-        // Scale in
-        const progress = (currentFrame - start) / (holdStart - start);
-        o.material.uniforms.opacity.value = progress;   // fade in
-        const scale = progress;                         // scale 0 → 1
-        o.mesh.scale.set(scale, scale, 1);
-        o.mesh.position.set(0, 0, 0.5);
-      } 
-      else if (currentFrame >= holdStart && currentFrame <= holdEnd) {
-        // Hold at full size
-        o.material.uniforms.opacity.value = 1;
-        o.mesh.scale.set(1, 1, 1);
-        o.mesh.position.set(0, 0, 0.5);
-      } 
-      else if (currentFrame > holdEnd && currentFrame <= end) {
-        // Scale out
-        const progress = (currentFrame - holdEnd) / (end - holdEnd);
-        o.material.uniforms.opacity.value = 1 - progress; // fade out
-        const scale = 1 - progress;                       // scale 1 → 0
-        o.mesh.scale.set(scale, scale, 1);
-        o.mesh.position.set(0, 0, 0.5);
-      }
-    });
+        if (currentFrame < start || currentFrame > end) {
+          o.material.uniforms.opacity.value = 0;
+        } else if (currentFrame >= start && currentFrame < holdStart) {
+          o.material.uniforms.opacity.value = Math.min(1, o.material.uniforms.opacity.value + 0.05);
+          const progress = (currentFrame - start) / (holdStart - start);
+          o.mesh.position.x = -1.2 + progress * 1.2;
+        } else if (currentFrame >= holdStart && currentFrame <= holdEnd) {
+          o.material.uniforms.opacity.value = 1;
+          o.mesh.position.x = 0;
+        } else if (currentFrame > holdEnd && currentFrame <= end) {
+          const progress = (currentFrame - holdEnd) / (end - holdEnd);
+          o.material.uniforms.opacity.value = Math.max(0, o.material.uniforms.opacity.value - 0.05);
+          o.mesh.position.x = progress * 1.2;
+        }
+      });
+    }
+
+    renderer.render(scene, camera);
   }
-
-  renderer.render(scene, camera);
-}
-
 
   animate();
 
@@ -357,7 +296,7 @@ function createOverlays() {
 
   async function shareVideo() {
     if (!recordedBlob) return alert("Please record video first!");
-    const file = new File([recordedBlob], "recording.webm", { type: mimeType });
+    const file = new File([recordedBlob], "recording.mp4", { type: mimeType });
     try {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: "My Video", text: "Check out this video!" });
