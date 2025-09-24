@@ -267,20 +267,45 @@ else if(currentFrame > holdEnd && currentFrame <= end){
     if(stopBtn) stopBtn.disabled = true;
   }
 
-  async function shareVideo(){
-    if(!recordedBlob) return alert("Please record video first!");
-    const file = new File([recordedBlob],"recording.mp4",{type:mimeType});
-    try{
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file],title:"My Video",text:"Check out this video!"});
-      } else if(navigator.share){
-        await navigator.share({title:"My Video",text:"Check out this video!"});
-        alert("This device cannot share video files, only text.");
-      } else {
-        alert("Sharing is not supported on this device/browser.");
-      }
-    }catch(err){console.error("Error sharing:",err);}
+  async function shareVideo() {
+  if (!recordedBlob) {
+    return alert("Please record video first!");
   }
+
+  // Always save as WebM for widest support
+  const fileType = mimeType.includes("webm") ? "video/webm" : "video/mp4";
+  const file = new File([recordedBlob], "recording." + (fileType.includes("mp4") ? "mp4" : "webm"), { type: fileType });
+
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      // ✅ Modern Android Chrome supports this
+      await navigator.share({
+        files: [file],
+        title: "My Video",
+        text: "Check out this video!",
+      });
+    } else if (navigator.share) {
+      // ✅ Fallback: only text share
+      await navigator.share({
+        title: "My Video",
+        text: "Check out this video!",
+      });
+      alert("This browser cannot share video files, only text.");
+    } else {
+      // ❌ Not supported at all
+      const url = URL.createObjectURL(recordedBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "recording." + (fileType.includes("mp4") ? "mp4" : "webm");
+      a.click();
+      alert("Sharing is not supported on this device. File downloaded instead.");
+    }
+  } catch (err) {
+    console.error("Error sharing:", err);
+    alert("Share failed: " + err.message);
+  }
+}
+
 
   // --- Button listeners ---
   const startBtn = document.getElementById("startBtn");
