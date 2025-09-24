@@ -9,21 +9,27 @@ export function script(containerId = "canvasContainer") {
   let mimeType;
   let recordedBlob;
 
-  // --- Detect iOS for MediaRecorder support ---
+  // --- Detect platform & choose mimeType ---
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
   if (isIOS && MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
-    mimeType = "video/mp4;codecs=avc1";
+    mimeType = "video/mp4;codecs=avc1"; // ✅ iOS Safari
   } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-    mimeType = "video/webm;codecs=vp8";
+    mimeType = "video/webm;codecs=vp8"; // ✅ Android Chrome
   } else {
-    mimeType = "video/mp4";
+    mimeType = "video/webm"; // fallback
   }
 
   container = document.getElementById(containerId);
   if (!container) return console.error(`Container ${containerId} not found!`);
 
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10);
+  camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    10
+  );
   camera.position.z = 1;
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -43,7 +49,6 @@ export function script(containerId = "canvasContainer") {
     }
   `;
 
-  // Video plane shader (just plain texture)
   const fragmentShaderVideo = `
     uniform sampler2D map;
     varying vec2 vUv;
@@ -52,26 +57,23 @@ export function script(containerId = "canvasContainer") {
     }
   `;
 
-  // Overlay circular zoom shader
   const overlayCircleShader = `
     uniform sampler2D map;
-uniform float opacity;
-uniform float progress; // 0 → 1
-varying vec2 vUv;
+    uniform float opacity;
+    uniform float progress; // 0 → 1
+    varying vec2 vUv;
 
-void main() {
-    vec2 center = vec2(0.5,0.5);
-    float dist = distance(vUv, center);
-    vec4 tex = texture2D(map, vUv);
+    void main() {
+      vec2 center = vec2(0.5,0.5);
+      float dist = distance(vUv, center);
+      vec4 tex = texture2D(map, vUv);
 
-    // Zoom in: progress 0→1, Zoom out: progress 1→0
-    if(dist < progress){
-        gl_FragColor = vec4(tex.rgb, opacity);
-    } else {
-        gl_FragColor = vec4(0.0,0.0,0.0,0.0); // fully transparent outside circle
+      if(dist < progress){
+          gl_FragColor = vec4(tex.rgb, opacity);
+      } else {
+          gl_FragColor = vec4(0.0,0.0,0.0,0.0);
+      }
     }
-}
-
   `;
 
   // --- Start video ---
@@ -136,10 +138,10 @@ void main() {
     overlayData.forEach(data => {
       const loader = new THREE.TextureLoader();
       const mat = new THREE.ShaderMaterial({
-        uniforms: { 
-          map: { value: null }, 
-          opacity: { value: 1 }, 
-          progress: { value: 0 } 
+        uniforms: {
+          map: { value: null },
+          opacity: { value: 1 },
+          progress: { value: 0 }
         },
         vertexShader,
         fragmentShader: overlayCircleShader,
@@ -152,29 +154,26 @@ void main() {
       scene.add(overlayMesh);
       overlays.push({ ...data, mesh: overlayMesh, material: mat });
 
-    loader.load(data.image, tex => {
-    mat.uniforms.map.value = tex;
+      loader.load(data.image, tex => {
+        mat.uniforms.map.value = tex;
 
-    // Video plane size in pixels (optional: you can define a base scale)
-    const videoPixelWidth = video.videoWidth;
-    const videoPixelHeight = video.videoHeight;
+        const videoPixelWidth = video.videoWidth;
+        const videoPixelHeight = video.videoHeight;
 
-    // Desired overlay size in pixels
-    const overlayPixelWidth = 480;
-    const overlayPixelHeight = 848;
+        const overlayPixelWidth = 480;
+        const overlayPixelHeight = 848;
 
-    // Scale factor to convert pixels → world units
-    const scaleX = (overlayPixelWidth / videoPixelWidth) * videoMesh.geometry.parameters.width;
-    const scaleY = (overlayPixelHeight / videoPixelHeight) * videoMesh.geometry.parameters.height;
+        const scaleX =
+          (overlayPixelWidth / videoPixelWidth) * videoMesh.geometry.parameters.width;
+        const scaleY =
+          (overlayPixelHeight / videoPixelHeight) * videoMesh.geometry.parameters.height;
 
-    overlayMesh.geometry.dispose();
-    overlayMesh.geometry = new THREE.PlaneGeometry(scaleX, scaleY);
+        overlayMesh.geometry.dispose();
+        overlayMesh.geometry = new THREE.PlaneGeometry(scaleX, scaleY);
 
-    // Center on video plane
-    overlayMesh.position.copy(videoMesh.position);
-    overlayMesh.position.z += 0.01;
-});
-
+        overlayMesh.position.copy(videoMesh.position);
+        overlayMesh.position.z += 0.01;
+      });
     });
   }
 
@@ -195,18 +194,14 @@ void main() {
           o.material.uniforms.progress.value = 0;
         }
         else if(currentFrame >= start && currentFrame < holdStart){
-          // zoom in circle
           o.material.uniforms.progress.value = (currentFrame - start)/(holdStart - start);
         }
         else if(currentFrame >= holdStart && currentFrame <= holdEnd){
           o.material.uniforms.progress.value = 1;
         }
-       // currentFrame logic in animate()
-else if(currentFrame > holdEnd && currentFrame <= end){
-    // Zoom out circular
-    o.material.uniforms.progress.value = 1 - (currentFrame - holdEnd) / (end - holdEnd);
-}
-
+        else if(currentFrame > holdEnd && currentFrame <= end){
+          o.material.uniforms.progress.value = 1 - (currentFrame - holdEnd) / (end - holdEnd);
+        }
       });
     }
 
@@ -268,44 +263,43 @@ else if(currentFrame > holdEnd && currentFrame <= end){
   }
 
   async function shareVideo() {
-  if (!recordedBlob) {
-    return alert("Please record video first!");
-  }
-
-  // Always save as WebM for widest support
-  const fileType = mimeType.includes("webm") ? "video/webm" : "video/mp4";
-  const file = new File([recordedBlob], "recording." + (fileType.includes("mp4") ? "mp4" : "webm"), { type: fileType });
-
-  try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      // ✅ Modern Android Chrome supports this
-      await navigator.share({
-        files: [file],
-        title: "My Video",
-        text: "Check out this video!",
-      });
-    } else if (navigator.share) {
-      // ✅ Fallback: only text share
-      await navigator.share({
-        title: "My Video",
-        text: "Check out this video!",
-      });
-      alert("This browser cannot share video files, only text.");
-    } else {
-      // ❌ Not supported at all
-      const url = URL.createObjectURL(recordedBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "recording." + (fileType.includes("mp4") ? "mp4" : "webm");
-      a.click();
-      alert("Sharing is not supported on this device. File downloaded instead.");
+    if (!recordedBlob) {
+      return alert("Please record video first!");
     }
-  } catch (err) {
-    console.error("Error sharing:", err);
-    alert("Share failed: " + err.message);
-  }
-}
 
+    const fileType = mimeType.includes("webm") ? "video/webm" : "video/mp4";
+    const file = new File(
+      [recordedBlob],
+      "recording." + (fileType.includes("mp4") ? "mp4" : "webm"),
+      { type: fileType }
+    );
+
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "My Video",
+          text: "Check out this video!",
+        });
+      } else if (navigator.share) {
+        await navigator.share({
+          title: "My Video",
+          text: "Check out this video!",
+        });
+        alert("This browser cannot share video files, only text.");
+      } else {
+        const url = URL.createObjectURL(recordedBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "recording." + (fileType.includes("mp4") ? "mp4" : "webm");
+        a.click();
+        alert("Sharing is not supported on this device. File downloaded instead.");
+      }
+    } catch (err) {
+      console.error("Error sharing:", err);
+      alert("Share failed: " + err.message);
+    }
+  }
 
   // --- Button listeners ---
   const startBtn = document.getElementById("startBtn");
@@ -313,7 +307,5 @@ else if(currentFrame > holdEnd && currentFrame <= end){
   const shareBtn = document.getElementById("shareBtn");
   if(startBtn) startBtn.addEventListener("click",startRecording);
   if(stopBtn) stopBtn.addEventListener("click",stopRecording);
- 
-
   if (shareBtn) shareBtn.addEventListener("click", shareVideo);
 }
