@@ -9,27 +9,20 @@ export function script(containerId = "canvasContainer") {
   let mimeType;
   let recordedBlob;
 
-  // --- Detect platform & choose mimeType ---
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
-  if (isIOS && MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
-    mimeType = "video/mp4;codecs=avc1"; // ✅ iOS Safari
+  // --- Detect & prefer MP4 ---
+  if (MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")) {
+    mimeType = "video/mp4;codecs=avc1";   // ✅ Preferred everywhere
   } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-    mimeType = "video/webm;codecs=vp8"; // ✅ Android Chrome
+    mimeType = "video/webm;codecs=vp8";   // fallback
   } else {
-    mimeType = "video/webm"; // fallback
+    mimeType = "video/webm";              // last resort
   }
 
   container = document.getElementById(containerId);
   if (!container) return console.error(`Container ${containerId} not found!`);
 
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(
-    60,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    10
-  );
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10);
   camera.position.z = 1;
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -60,7 +53,7 @@ export function script(containerId = "canvasContainer") {
   const overlayCircleShader = `
     uniform sampler2D map;
     uniform float opacity;
-    uniform float progress; // 0 → 1
+    uniform float progress;
     varying vec2 vUv;
 
     void main() {
@@ -69,9 +62,9 @@ export function script(containerId = "canvasContainer") {
       vec4 tex = texture2D(map, vUv);
 
       if(dist < progress){
-          gl_FragColor = vec4(tex.rgb, opacity);
+        gl_FragColor = vec4(tex.rgb, opacity);
       } else {
-          gl_FragColor = vec4(0.0,0.0,0.0,0.0);
+        gl_FragColor = vec4(0.0,0.0,0.0,0.0);
       }
     }
   `;
@@ -138,10 +131,10 @@ export function script(containerId = "canvasContainer") {
     overlayData.forEach(data => {
       const loader = new THREE.TextureLoader();
       const mat = new THREE.ShaderMaterial({
-        uniforms: {
-          map: { value: null },
-          opacity: { value: 1 },
-          progress: { value: 0 }
+        uniforms: { 
+          map: { value: null }, 
+          opacity: { value: 1 }, 
+          progress: { value: 0 } 
         },
         vertexShader,
         fragmentShader: overlayCircleShader,
@@ -163,10 +156,8 @@ export function script(containerId = "canvasContainer") {
         const overlayPixelWidth = 480;
         const overlayPixelHeight = 848;
 
-        const scaleX =
-          (overlayPixelWidth / videoPixelWidth) * videoMesh.geometry.parameters.width;
-        const scaleY =
-          (overlayPixelHeight / videoPixelHeight) * videoMesh.geometry.parameters.height;
+        const scaleX = (overlayPixelWidth / videoPixelWidth) * videoMesh.geometry.parameters.width;
+        const scaleY = (overlayPixelHeight / videoPixelHeight) * videoMesh.geometry.parameters.height;
 
         overlayMesh.geometry.dispose();
         overlayMesh.geometry = new THREE.PlaneGeometry(scaleX, scaleY);
@@ -238,7 +229,7 @@ export function script(containerId = "canvasContainer") {
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = mimeType.includes("mp4") ? "recording.mp4" : "recording.webm";
+      a.download = "recording.mp4";  // ✅ always MP4 filename
       a.click();
 
       const videoPreview = document.getElementById("preview");
@@ -267,12 +258,7 @@ export function script(containerId = "canvasContainer") {
       return alert("Please record video first!");
     }
 
-    const fileType = mimeType.includes("webm") ? "video/webm" : "video/mp4";
-    const file = new File(
-      [recordedBlob],
-      "recording." + (fileType.includes("mp4") ? "mp4" : "webm"),
-      { type: fileType }
-    );
+    const file = new File([recordedBlob], "recording.mp4", { type: mimeType });
 
     try {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -291,7 +277,7 @@ export function script(containerId = "canvasContainer") {
         const url = URL.createObjectURL(recordedBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "recording." + (fileType.includes("mp4") ? "mp4" : "webm");
+        a.download = "recording.mp4";
         a.click();
         alert("Sharing is not supported on this device. File downloaded instead.");
       }
@@ -307,5 +293,5 @@ export function script(containerId = "canvasContainer") {
   const shareBtn = document.getElementById("shareBtn");
   if(startBtn) startBtn.addEventListener("click",startRecording);
   if(stopBtn) stopBtn.addEventListener("click",stopRecording);
-  if (shareBtn) shareBtn.addEventListener("click", shareVideo);
+  if(shareBtn) shareBtn.addEventListener("click", shareVideo);
 }
